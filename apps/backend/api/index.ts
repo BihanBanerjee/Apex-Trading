@@ -21,11 +21,7 @@ app.get('/health', (req, res) => {
 
 // basic auth endpoints
 
-app.post("/api/v1/signup", () => {
-
-})
-
-app.post('/api/v1/signin', () => {
+app.post("/api/v1/auth", () => {
 
 })
 

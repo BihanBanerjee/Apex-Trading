@@ -1,6 +1,7 @@
 export interface PriceData {
     symbol: string,
-    price: number,
+    askPrice: number,
+    bidPrice: number,
     timestamp: number,
     sequence?: number
 }

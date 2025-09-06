@@ -1,6 +1,7 @@
 {
   "name": "@repo/redis-client",
-  "module": "index.ts",
+  "main": "index.ts",
+  "module": "index.ts", 
   "type": "module",
   "private": true,
   "devDependencies": {
@@ -14,6 +15,6 @@
     "ioredis": "^5.7.0"
   },
   "exports": {
-    ".": "./index.ts"
+    "./*": "./*.ts"
   }
 }

@@ -5,6 +5,8 @@ import type { PriceData } from '../shared/types';
 
 const SUPPORTED_PAIRS = ["SOL_USDC_PERP", "BTC_USDC_PERP", "ETH_USDC_PERP"]
 
+let latestPrices: Map<string, PriceData> = new Map();
+const SEND_INTERVAL_MS = 100;
 
 async function main () {
     const ws = new WebSocket("wss://ws.backpack.exchange/")
@@ -19,30 +21,42 @@ async function main () {
         ws.send(JSON.stringify(subscribeMessage))
     }
 
-    ws.onmessage = async({data}) => {
+    ws.onmessage = ({data}) => {
         try {
             const payload = JSON.parse(data.toString());
-            // console.log(payload);
-            if (!payload.data.a || !payload.data.s) {
+            if (!payload.data.a || !payload.data.b || !payload.data.s) {
                 return
             }
             const priceData: PriceData = {
                 symbol: payload.data.s,
-                price: parseFloat(payload.data.a),
+                askPrice: parseFloat(payload.data.a),
+                bidPrice: parseFloat(payload.data.b),
                 timestamp: payload.data.E,
                 sequence: payload.data.u
             }
 
-            const message = {
-                type: "PRICE",
-                data: priceData
-            };
-            
-            await redisClient.xadd(REDIS_STREAMS.ENGINE_INPUT, '*', 'data', JSON.stringify(message))
+            latestPrices.set(payload.data.s, priceData);
         } catch(error) {
             console.error("Error processing message", error);
         }
     }
+
+    setInterval(async () => {
+        if (latestPrices.size > 0) {
+            for (const [symbol, priceData] of latestPrices) {
+                const message = {
+                    type: "PRICE",
+                    data: priceData
+                };
+                
+                try {
+                    await redisClient.xadd(REDIS_STREAMS.ENGINE_INPUT, '*', 'data', JSON.stringify(message));
+                } catch (error) {
+                    console.error(`Error sending price for ${symbol}:`, error);
+                }
+            }
+        }
+    }, SEND_INTERVAL_MS);
 
     ws.onclose = () => {
         console.log("client closed!!!");

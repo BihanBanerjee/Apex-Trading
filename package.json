@@ -1,5 +1,5 @@
 {
-  "name": "BackPacker",
+  "name": "back-packer",
   "private": true,
   "scripts": {
     "build": "turbo run build",
@@ -20,5 +20,8 @@
   "workspaces": [
     "apps/*",
     "packages/*"
-  ]
+  ],
+  "dependencies": {
+    "dotenv": "^17.2.2"
+  }
 }

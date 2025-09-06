@@ -1,5 +1,5 @@
 import WebSocket from "ws";
-import redisClient from "@repo/redis-client/index";
+import redisClient from "@repo/redis-client";
 import { REDIS_STREAMS } from '../shared/config';
 import type { PriceData } from '../shared/types';
 

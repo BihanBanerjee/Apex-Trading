@@ -22,9 +22,5 @@
     "packages/*"
   ],
   "dependencies": {
-    "cookie-parser": "^1.4.7",
-    "dotenv": "^17.2.2",
-    "jsonwebtoken": "^9.0.2",
-    "resend": "^6.0.2"
   }
 }

@@ -1,47 +1,29 @@
-import express from "express";
-import redisClient from "@repo/redis-client"
-import dotenv from "dotenv";
+import redisClient from "@repo/redis-client";
+import { REDIS_STREAMS } from '@repo/shared/config';
+import type { Response } from "express";
+import type { AuthRequest } from '../middleware/auth';
 
-import { REDIS_STREAMS } from '../shared/config';
-
-dotenv.config();
-const app = express();
-const PORT = process.env.PORT || 3001;
-
-app.use(express.json());
-
-
-// just a health check endpoint.
-app.get('/health', (req, res) => {
-    res.json({
-        status: "OK",
-        timestamp: new Date().toISOString()
-    })
-});
-
-// basic auth endpoints
-
-app.post("/api/v1/auth", () => {
-
-})
-
-app.get('/api/v1/signin/post?token=123', () => {
-
-})
-
-
-app.post('/api/v1/trade/create', async (req, res) => {
+export const createTrade = async (req: AuthRequest, res: Response) => {
     try {
-        const { asset, type, margin, leverage, slippage } = req.body
+        const { asset, type, margin, leverage, slippage } = req.body;
+        const userId = req.user?.userId;
+
         // Validation
-        if( !asset || !type || !margin || !leverage ) {
+        if (!asset || !type || !margin || !leverage) {
             return res.status(400).json({
                 error: "Missing required fields."
-            })
+            });
+        }
+
+        if (!userId) {
+            return res.status(401).json({
+                error: "User not authenticated"
+            });
         }
 
         const tradeData = {
             orderId: `trade_${Date.now()}_${Math.random().toString(36).slice(2,11)}`,
+            userId,
             asset,
             type,
             margin: parseFloat(margin),
@@ -49,93 +31,91 @@ app.post('/api/v1/trade/create', async (req, res) => {
             slippage: slippage || 100,
             timestamp: Date.now(),
             status: 'PENDING'
-        }
+        };
 
         const message = {
             type: "TRADE_CREATE",
             data: tradeData
-        }
+        };
 
-        await redisClient.xadd(REDIS_STREAMS.ENGINE_INPUT, "*", 'data', JSON.stringify(message))
+        await redisClient.xadd(REDIS_STREAMS.ENGINE_INPUT, "*", 'data', JSON.stringify(message));
 
         res.json({
             orderId: tradeData.orderId
-        })
+        });
     } catch (error) {
         console.error('Error creating trade', error);
         res.status(500).json({
             error: 'Internal Server Error'
-        })
+        });
     }
-})
+};
 
-app.post('/api/v1/trade/close', async (req, res) => {
+export const closeTrade = async (req: AuthRequest, res: Response) => {
     try {
         const { orderId } = req.body;
-        if(!orderId) {
+        const userId = req.user?.userId;
+
+        if (!orderId) {
             return res.status(400).json({
                 error: "Order id is required."
-            })
+            });
+        }
+
+        if (!userId) {
+            return res.status(401).json({
+                error: "User not authenticated"
+            });
         }
 
         const closeData = {
             orderId,
+            userId,
             action: "CLOSE",
             timestamp: Date.now()
-        }
+        };
 
         const message = {
             type: "TRADE_CLOSE",
             data: closeData
-        }
+        };
 
-        await redisClient.xadd(REDIS_STREAMS.ENGINE_INPUT, '*', 'data', JSON.stringify(message))
+        await redisClient.xadd(REDIS_STREAMS.ENGINE_INPUT, '*', 'data', JSON.stringify(message));
+        
         res.json({
             success: true,
             message: 'Close order submitted'
-        })
+        });
 
-    } catch(error) {
-        console.error('Error closing trade', error)
+    } catch (error) {
+        console.error('Error closing trade', error);
         res.status(500).json({
             error: 'Internal server error.'
-        })
+        });
     }
-})
+};
 
-app.get('/api/v1/balance/usd', async(req, res) => {
-
-})
-
-app.get('/api/v1/balance', async() => {
-
-})
-
-app.get('/api/v1/supportedAssets', () => {
-
-})
-
-
-
-
-
-
-
-//Place Order endpoint
-
-app.post('/orders', async (req, res) => {
+export const placeOrder = async (req: AuthRequest, res: Response) => {
     try {
         const { symbol, side, quantity, orderType } = req.body;
+        const userId = req.user?.userId;
 
-        // validation
+        // Validation
         if (!symbol || !side || !quantity) {
             return res.status(400).json({
                 error: "Missing required fields"
             });
         }
 
+        if (!userId) {
+            return res.status(401).json({
+                error: "User not authenticated"
+            });
+        }
+
         const orderData = {
             orderId: `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            userId,
             symbol,
             side, // 'BUY' or 'SELL'
             quantity: parseFloat(quantity),
@@ -167,13 +147,4 @@ app.post('/orders', async (req, res) => {
         console.error('Error processing order:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
-});
-
-
-
-
-
-app.listen(PORT, () => {
-    console.log(`HTTP API server running on port ${PORT}`);
-});
-
+};

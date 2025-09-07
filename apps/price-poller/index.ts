@@ -1,7 +1,7 @@
 import WebSocket from "ws";
 import redisClient from "@repo/redis-client";
-import { REDIS_STREAMS } from '../shared/config';
-import type { PriceData } from '../shared/types';
+import type { PriceData } from "@repo/shared/types";
+import { REDIS_STREAMS } from "@repo/shared/config";
 
 const SUPPORTED_PAIRS = ["SOL_USDC_PERP", "BTC_USDC_PERP", "ETH_USDC_PERP"]
 

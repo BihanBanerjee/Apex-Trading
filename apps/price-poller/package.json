@@ -1,17 +1,19 @@
 {
-  "name": "api",
+  "name": "price-poller",
+  "version": "0.0.0",
   "module": "index.ts",
   "type": "module",
   "private": true,
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/express": "^5.0.3"
+    "@types/ws": "^8.18.1"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
-    "express": "^5.1.0",
-    "@repo/redis-client": "*"
+    "ws": "^8.18.3",
+    "@repo/redis-client": "workspace:*",
+    "@repo/shared": "workspace:*"
   }
 }

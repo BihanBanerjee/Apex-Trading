@@ -1,0 +1,14 @@
+{
+  "name": "@repo/shared",
+  "private": true,
+  "exports":{
+    "./types": "./types.ts",
+    "./config": "./config.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

@@ -41,48 +41,100 @@ Building the backend of a trading application with high-speed execution and cras
 - **Architecture**: In-memory state management for high-speed execution
 - **State Variables**:
   - **Balances**: User balance data for all application users
-  - **Open Orders**: All active orders that change with market conditions
+  - **Open Orders**: All active orders (market, stop loss, take profit)
+  - **Positions**: User positions with associated stop loss/take profit levels
   - **Prices**: Real-time asset prices (ETH, BTC, SOL) from price-poller
 - **Performance**: Avoids database calls during execution for speed
+- **Order Types Supported**:
+  - **Market Orders**: Immediate execution at current market price
+  - **Stop Loss Orders**: Automatic position closure when price hits stop level
+  - **Take Profit Orders**: Automatic position closure when price hits profit target
 
-### 4. Redis Streams
-- **Primary Stream**: Contains both real-time prices and user instructions/orders
-- **Order Execution**: Instructions get the latest price available in stream (price right before instruction)
-- **Stream Structure**: Sequential mix of price updates and order instructions
+### 4. Redis Streams & Worker Architecture
+- **Single Primary Stream**: Handles all communication between components
+- **Stream Message Types**:
+  - `price_update`: Real-time prices from price-poller → Engine
+  - `user_instruction`: Trading instructions from HTTP server → Engine
+  - `order_response`: Processed order responses from Engine → Worker → HTTP server
+  - `closed_order`: Completed orders from Engine → Worker → Database
+- **Order Execution**: Instructions use the latest price available in stream
+- **Worker Process**: Acts as intelligent message router consuming engine outputs
 
 ### 5. Crash Recovery System
 
 #### Snapshot Mechanism
-- **Frequency**: Every 10 seconds
-- **Storage**: Database dump of complete engine state (balances, open orders, prices)
-- **Purpose**: Baseline state for recovery
+- **Frequency**: Every 10 seconds (async operation)
+- **Storage**: PostgreSQL database with single-row UPSERT strategy
+- **Performance**: Non-blocking async dumps (~20ms) - zero impact on trading performance
+- **Data Structure**: JSONB format containing complete engine state
+- **Schema**:
+```sql
+CREATE TABLE engine_snapshots (
+  id INTEGER PRIMARY KEY DEFAULT 1,
+  snapshot_data JSONB NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  CONSTRAINT single_row CHECK (id = 1)
+);
+```
+- **Strategy**: New snapshots replace old ones (single row maintenance)
+
+#### Worker Process Architecture
+- **Purpose**: Intelligent message router and I/O handler
+- **Dual Function**:
+  1. **Response Handler**: Routes `order_response` messages back to HTTP server for real-time frontend updates
+  2. **Database Handler**: Processes `closed_order` messages and saves to database for historical records
+- **Flow**: Engine → Single Stream → Worker → (HTTP Server | Database)
+- **Performance**: Offloads all I/O operations from engine for maximum trading speed
 
 #### Recovery Process
-1. Load latest snapshot (e.g., t=0 state)
-2. Replay all stream events from snapshot time to crash time (e.g., t=0 to t=4)
+1. Load latest snapshot from PostgreSQL (t=0 state)
+2. Replay all Redis stream events from snapshot time to crash time (t=0 to t=4)
 3. Apply price updates and execute orders in chronological order
 4. Restore engine to exact state at crash moment
 
-### 6. Order Processing Flow
-1. HTTP server receives user request
-2. Server sends instruction to Redis stream
-3. Engine processes instruction with latest available price
-4. **[Future Implementation]** Engine sends processed order to response stream
-5. **[Future Implementation]** HTTP server receives response and notifies frontend
-6. Closed orders dumped to database for historical records
+### 6. Complete Order Processing Flow
+1. **User Request**: HTTP server receives trading request
+2. **Instruction Publishing**: Server sends `user_instruction` message to Redis stream
+3. **Order Processing**: Engine consumes instruction and processes with latest available price
+4. **Response Publishing**: Engine publishes `order_response` message to stream
+5. **Response Routing**: Worker consumes response and forwards to HTTP server
+6. **Frontend Notification**: HTTP server sends real-time response to frontend
+7. **Order Completion**: For closed orders, Engine publishes `closed_order` message
+8. **Historical Storage**: Worker consumes closed order and saves to database
+
+### 7. Message Flow Architecture
+```
+Price-Poller ──┐
+               ├──→ Redis Stream ──→ Engine ──→ Redis Stream ──┐
+HTTP Server ───┘                                              ├──→ Worker ──┬──→ HTTP Server
+                                                               │              └──→ Database
+                                                               └──→ (Snapshots) ──→ PostgreSQL
+```
+
+### 8. User Onboarding & Balance Management
+- **New User Detection**: First-time auth endpoint access triggers initial balance allocation
+- **Initial Balance**: Engine receives instruction and allocates free starting balance (in-memory)
+- **Balance Storage**: All user balances maintained in-memory for zero-latency trading
+- **Balance Persistence**: Included in periodic snapshots for crash recovery
 
 ## Implementation Phases
 
 ### Phase 1 (Current Focus)
-- Price-poller
-- HTTP server  
-- Engine
-- Basic Redis stream communication
+- Price-poller ✅
+- HTTP server (auth complete, trading endpoints pending)
+- Engine with core trading features:
+  - Market orders
+  - Stop loss orders
+  - Take profit orders
+  - Position management
+- Worker process for response routing and database operations
+- Redis stream communication
 
-### Phase 2 (Future)
-- Response stream from engine to HTTP server
-- Frontend notifications
-- Order history management
+### Phase 2 (Future)  
+- Real-time WebSocket connections to frontend
+- Advanced analytics and reporting
+- Multi-asset portfolio management
+- Advanced order types (trailing stops, OCO orders)
 
 ## API Server Structure
 
@@ -124,7 +176,14 @@ apps/api/
 ## Technical Considerations
 - **Assets Supported**: ETH, BTC, SOL, ADA
 - **Data Source**: Backpack WebSocket server
-- **Storage**: Redis for streams, Database for snapshots and closed orders
-- **Performance**: In-memory processing, minimal database interactions during trading
-- **Authentication**: Resend email service, JWT tokens, HTTP-only cookies
+- **Storage**: 
+  - Redis for real-time streams and instructions
+  - PostgreSQL for engine snapshots (single-row UPSERT)
+  - PostgreSQL for historical closed orders (via worker process)
+- **Performance**: 
+  - In-memory processing for all trading operations
+  - Zero database calls during trade execution
+  - Async snapshots every 10s (~20ms, non-blocking)
+- **Authentication**: Nodemailer email service, JWT tokens, HTTP-only cookies
 - **Security**: CORS protection, secure cookies in production
+- **Crash Recovery**: PostgreSQL snapshots + Redis stream replay

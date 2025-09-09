@@ -1,20 +1,25 @@
 import prisma from "@repo/database";
 import jwt from "jsonwebtoken";
-import { Resend } from "resend";
+import { z } from "zod";
 import type { Request, Response } from "express";
+import transporter from "../services/transporter";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const emailSchema = z.object({
+    email: z.string().email("Please provide a valid email address")
+});
 
 export const sendMagicLink = async (req: Request, res: Response) => {
     try {
-        const { email } = req.body;
+        // Validate email with Zod
+        const result = emailSchema.safeParse(req.body);
         
-        // Validate email
-        if (!email || !email.includes('@')) {
+        if (!result.success) {
             return res.status(400).json({
-                error: "Valid email is required"
+                error: result.error.issues[0]?.message
             });
         }
+        
+        const { email } = result.data;
 
         // Check if user exists or create new user
         let user = await prisma.user.findUnique({
@@ -47,13 +52,13 @@ export const sendMagicLink = async (req: Request, res: Response) => {
         );
 
         // Create magic link
-        const magicLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/verify?token=${token}`;
+        const magicLink = `${process.env.BASE_URL || 'http://localhost:3001'}/auth/verify?token=${token}`;
 
-        // Send email via Resend
-        await resend.emails.send({
-            from: process.env.FROM_EMAIL || 'auth@yourdomain.com',
+        // Send email via Nodemailer
+        const info = await transporter.sendMail({
+            from: '"Verify before trading"<banerjeebihan456@gmail.com>',
             to: email,
-            subject: 'Sign in to Trading Platform',
+            subject: 'Verify your email address to sign in to Trading Platform',
             html: `
                 <h2>Sign in to your account</h2>
                 <p>Click the button below to sign in:</p>
@@ -89,7 +94,10 @@ export const verifyToken = async (req: Request, res: Response) => {
         }
 
         // Verify JWT token
-        const decoded = jwt.verify(token as string, process.env.JWT_SECRET || "your-secret-key") as any;
+        const decoded = jwt.verify(token as string, process.env.JWT_SECRET || "your-secret-key") as {
+            userId: string,
+            email: string
+        };
         
         // Verify user still exists
         const user = await prisma.user.findUnique({
@@ -148,7 +156,7 @@ export const verifyToken = async (req: Request, res: Response) => {
     }
 };
 
-export const logout = async (req: Request, res: Response) => {
+export const logout = async (_req: Request, res: Response) => {
     res.clearCookie('auth_token');
     res.json({
         success: true,

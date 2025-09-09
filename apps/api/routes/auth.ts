@@ -10,6 +10,6 @@ router.post("/", sendMagicLink);
 router.get("/verify", verifyToken);
 
 // Logout - clear cookie
-router.delete("/logout", logout);
+router.post("/logout", logout);
 
 export default router;

@@ -43,3 +43,11 @@ model ExistingTrade {
   userId          String
   createdAt       DateTime  @default(now())
 }
+
+model EngineSnapshot {
+  id              Int       @id @default(1)
+  snapshotData    Json
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@map("engine_snapshots")
+}
